@@ -106,3 +106,5 @@ localversion
 
 # Red Hat key security
 kernel/x509_certificate_list
+
+vai_app
