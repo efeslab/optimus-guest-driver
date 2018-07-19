@@ -1,7 +1,7 @@
 TARGET_MODULE := vai
 
 ifneq ($(KERNELRELEASE),)
-	$(TARGET_MODULE)-objs := vai_core.o
+	$(TARGET_MODULE)-objs := vai_core.o vai_para.o
 	obj-m += $(TARGET_MODULE).o
 else
 	KERNELDIR := /lib/modules/$(shell uname -r)/build

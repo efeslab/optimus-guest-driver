@@ -17,4 +17,4 @@ struct vai_dma_region {
 
 extern struct list_head vai_dma_region_list;
 
-
+#endif /* _VAI_INTERNAL_ */

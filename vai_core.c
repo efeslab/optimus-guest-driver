@@ -10,6 +10,7 @@
 
 #include "vai_internal.h"
 #include "vai_types.h"
+#include "vai_para.h"
 
 static dev_t vai_dev;
 static struct cdev vai_cdev;
@@ -21,12 +22,14 @@ static struct class *vai_class;
 static int vai_open(struct inode *in, struct file *f)
 {
     printk("vai: open device\n");
+    vai_para_open();
     return 0;
 }
 
 static int vai_release(struct inode *in, struct file *f)
 {
     printk("vai: release device\n");
+    vai_para_close();
     return 0;
 }
 
