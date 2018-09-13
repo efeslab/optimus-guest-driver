@@ -6,30 +6,35 @@
 #include <linux/device.h>
 #include <linux/errno.h>
 #include <asm/uaccess.h>
-#include <uapi/asm/kvm_para.h>
+#include <linux/pci.h>
+#include <linux/init.h>
 
 #include "vai_internal.h"
 #include "vai_types.h"
-#include "vai_para.h"
 
-static dev_t vai_dev;
-static struct cdev vai_cdev;
-static struct class *vai_class;
+static int major;
+static struct pci_dev *pdev;
+static void __iomem *mmio;
+static struct class *class;
 
-#define FIRST_MINOR 0
-#define MINOR_CNT 1
+#define VAI_VENDOR_ID 0xdead
+#define VAI_DEVICE_ID 0xbeef
+
+static struct pci_device_id vai_pci_ids[] = {
+	{ PCI_DEVICE(VAI_VENDOR_ID, VAI_DEVICE_ID), },
+	{ 0, }
+};
+MODULE_DEVICE_TABLE(pci, vai_pci_ids);
 
 static int vai_open(struct inode *in, struct file *f)
 {
     printk("vai: open device\n");
-    vai_para_open();
     return 0;
 }
 
 static int vai_release(struct inode *in, struct file *f)
 {
     printk("vai: release device\n");
-    vai_para_close();
     return 0;
 }
 
@@ -48,44 +53,75 @@ static struct file_operations vai_fops = {
     .unlocked_ioctl = vai_ioctl
 };
 
-static int __init vai_init(void)
+static int vai_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *pcidevid)
 {
-    int ret;
-    struct device *dev_ret;
+    struct device *dev;
 
-    if ((ret = alloc_chrdev_region(&vai_dev, FIRST_MINOR, MINOR_CNT, "vai_ioctl")) < 0) {
-        return ret;
+    dev_info(&(pcidev->dev), "pci_probe\n");
+    major = register_chrdev(0, "vai-pci", &vai_fops);
+    pdev = pcidev;
+
+    if (pci_enable_device(pcidev) < 0) {
+        dev_err(&pcidev->dev, "pci_enable_device\n");
+        goto error;
     }
 
-    cdev_init(&vai_cdev, &vai_fops);
-
-    if ((ret = cdev_add(&vai_cdev, vai_dev, MINOR_CNT)) < 0) {
-        return ret;
+    if (pci_request_region(pcidev, 0, "vai_pci_region_0")) {
+        dev_err(&pcidev->dev, "pci_request_region\n");
+        goto error;
     }
 
-    if (IS_ERR(vai_class = class_create(THIS_MODULE, "vai"))) {
-        cdev_del(&vai_cdev);
-        unregister_chrdev_region(vai_dev, MINOR_CNT);
-        return PTR_ERR(vai_class);
+    mmio = pci_iomap(pcidev, 0, pci_resource_len(pcidev, 0));
+
+    class = class_create(THIS_MODULE, "accel");
+    if (IS_ERR(class)) {
+        pci_release_region(pcidev, 0);
+        unregister_chrdev(major, "vai-pci");
+        goto error;
     }
 
-    if (IS_ERR(dev_ret = device_create(vai_class, NULL, vai_dev, NULL, "vafu"))) {
-        class_destroy(vai_class);
-        cdev_del(&vai_cdev);
-        unregister_chrdev_region(vai_dev, MINOR_CNT);
-        return PTR_ERR(dev_ret);
+    dev = device_create(class, NULL, major, NULL, "vai");
+    if (IS_ERR(dev)) {
+        class_destroy(class);
+        pci_release_region(pcidev, 0);
+        unregister_chrdev(major, "vai-pci");
+        goto error;
     }
 
     return 0;
+
+error:
+    return 1;
 }
 
-static void __exit vai_exit(void)
+static void vai_pci_remove(struct pci_dev *pcidev)
 {
-    device_destroy(vai_class, vai_dev);
-    class_destroy(vai_class);
-    cdev_del(&vai_cdev);
-    unregister_chrdev_region(vai_dev, MINOR_CNT);
+    device_destroy(class, major);
+    class_destroy(class);
+    pci_release_region(pcidev, 0);
+    unregister_chrdev(major, "vai-pci");
 }
+
+static struct pci_driver vai_pci_driver = {
+    .name = "vai-pci",
+    .id_table = vai_pci_ids,
+    .probe = vai_pci_probe,
+    .remove = vai_pci_remove
+};
+
+static int vai_init(void)
+{
+    if (pci_register_driver(&vai_pci_driver) < 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static void vai_exit(void)
+{
+    pci_unregister_driver(&vai_pci_driver);
+}
+
 
 module_init(vai_init);
 module_exit(vai_exit);
