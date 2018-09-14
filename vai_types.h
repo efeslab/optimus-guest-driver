@@ -16,11 +16,11 @@
 #define VAI_BASE 0x0
 
 typedef struct {
-    uint8_t data[32];
+    uint8_t data[16];
 } afu_id_t;
 
 typedef struct {
-    uint8_t data[32];
+    uint8_t data[16];
 } afu_version_t;
 
 struct vai_afu_conn {
