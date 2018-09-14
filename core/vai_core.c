@@ -299,18 +299,12 @@ static int vai_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *pci
     bar0_end = pci_resource_end(pcidev, 0);
     pr_info("length %llx\n", (unsigned long long)(bar0_end + 1 - bar0_start));
 
-    class = class_create(THIS_MODULE, "accel");
-    if (IS_ERR(class))
-        goto err_release_region;
-
     device = device_create(class, NULL, dev, NULL, "vai");
     if (IS_ERR(device))
         goto err_destroy_class;
 
     return 0;
 
-err_destroy_class:
-    class_destroy(class);
 err_release_region:
     pci_release_region(pcidev, 0);
 err_cdev_del:
@@ -323,10 +317,10 @@ err:
 
 static void vai_pci_remove(struct pci_dev *pcidev)
 {
-    unregister_chrdev_region(dev, 1);
-    class_destroy(class);
+    device_unregister(device);
     pci_release_region(pcidev, 0);
     cdev_del(&cdev);
+    unregister_chrdev_region(dev, 1);
 }
 
 static struct pci_driver vai_pci_driver = {
@@ -341,11 +335,17 @@ static int vai_init(void)
     if (pci_register_driver(&vai_pci_driver) < 0) {
         return 1;
     }
+
+    class = class_create(THIS_MODULE, "accel");
+    if (IS_ERR(class))
+        return 1;
+
     return 0;
 }
 
 static void vai_exit(void)
 {
+    class_destroy(class);
     pci_unregister_driver(&vai_pci_driver);
 }
 
