@@ -115,7 +115,7 @@ struct list_head mdev_devices_list;
 static void vai_create_config_space(struct mdev_state *mdev_state)
 {
 	/* PCI dev ID */
-	STORE_LE32((u32 *) &mdev_state->vconfig[0x0], 0xdeadbeef);
+	STORE_LE32((u32 *) &mdev_state->vconfig[0x0], 0xbeefdead);
 
 	/* Control: I/O+, Mem-, BusMaster- */
 	STORE_LE16((u16 *) &mdev_state->vconfig[0x4], 0x0001);
@@ -526,6 +526,7 @@ static int vai_get_device_info(struct mdev_device *mdev,
                 struct vfio_device_info *dev_info)
 {
     dev_info->flags = VFIO_DEVICE_FLAGS_PCI;
+    dev_info->flags |= VFIO_DEVICE_FLAGS_RESET;
     dev_info->num_regions = VFIO_PCI_NUM_REGIONS;
     dev_info->num_irqs = VFIO_PCI_NUM_IRQS;
 
