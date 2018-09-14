@@ -323,10 +323,10 @@ err:
 
 static void vai_pci_remove(struct pci_dev *pcidev)
 {
+    unregister_chrdev_region(dev, 1);
     class_destroy(class);
     pci_release_region(pcidev, 0);
     cdev_del(&cdev);
-    unregister_chrdev_region(dev, 1);
 }
 
 static struct pci_driver vai_pci_driver = {
