@@ -19,6 +19,7 @@
 static dev_t dev;
 static struct cdev cdev;
 static struct pci_dev *pdev;
+static struct device *device;
 static void __iomem *mmio;
 static struct class *class;
 resource_size_t bar0_start;
@@ -265,8 +266,6 @@ static struct file_operations vai_fops = {
 
 static int vai_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *pcidevid)
 {
-    struct device *device;
-
     hash_init(pinned_pages);
 
     dev_info(&(pcidev->dev), "pci_probe\n");
@@ -300,8 +299,10 @@ static int vai_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *pci
     pr_info("length %llx\n", (unsigned long long)(bar0_end + 1 - bar0_start));
 
     device = device_create(class, NULL, dev, NULL, "vai");
-    if (IS_ERR(device))
-        goto err_destroy_class;
+    if (IS_ERR(device)) {
+        pr_err("vai: error in creating device\n");
+        goto err_release_region;
+    }
 
     return 0;
 
@@ -312,15 +313,19 @@ err_cdev_del:
 err_unregister_chrdev:
     unregister_chrdev_region(dev, 1);
 err:
+    pci_disable_device(pcidev);
     return 1;
 }
 
 static void vai_pci_remove(struct pci_dev *pcidev)
 {
+    printk("vai: pci remove\n");
+
     device_unregister(device);
     pci_release_region(pcidev, 0);
     cdev_del(&cdev);
     unregister_chrdev_region(dev, 1);
+    pci_disable_device(pcidev);
 }
 
 static struct pci_driver vai_pci_driver = {
@@ -332,21 +337,23 @@ static struct pci_driver vai_pci_driver = {
 
 static int vai_init(void)
 {
-    if (pci_register_driver(&vai_pci_driver) < 0) {
+    class = class_create(THIS_MODULE, "accel");
+    if (IS_ERR(class)) {
+        pr_err("vai: failed to create class\n");
         return 1;
     }
 
-    class = class_create(THIS_MODULE, "accel");
-    if (IS_ERR(class))
+    if (pci_register_driver(&vai_pci_driver) < 0) {
         return 1;
+    }
 
     return 0;
 }
 
 static void vai_exit(void)
 {
-    class_destroy(class);
     pci_unregister_driver(&vai_pci_driver);
+    class_destroy(class);
 }
 
 
