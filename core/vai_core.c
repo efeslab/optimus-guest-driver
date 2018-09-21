@@ -84,27 +84,32 @@ static int vai_release(struct inode *in, struct file *f)
 static int vai_mmap(struct file *file, struct vm_area_struct *vma)
 {
     uint64_t size = vma->vm_end - vma->vm_start;
+    int ret;
+
+    printk("vai: mmap vma start %lx size %llx\n", vma->vm_start, size);
 
     vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
-    return remap_pfn_range(vma, vma->vm_start, bar0_start >> PAGE_SHIFT,
+    ret = remap_pfn_range(vma, vma->vm_start, bar0_start >> PAGE_SHIFT,
             size, vma->vm_page_prot);
 
-    return 0;
+    printk("vai: mmap ret %d\n", ret);
+
+    return ret;
 }
 
-static long vai_ioctl_get_version(void __user *arg)
+static long vai_ioctl_get_id(void __user *arg)
 {
-    struct vai_afu_version version;
-    uint64_t *ptr = (uint64_t*)&version;
+    afu_id_t afu_id;
+    uint64_t *ptr = (uint64_t*)&afu_id;
     int i;
 
-    for (i=0 ; i<4; i++) {
+    for (i=0 ; i<2; i++) {
         uint64_t x = vai_read_mmio(8*i);
         *(ptr+i) = x;
         printk("vai: mmio read %x: %llx\n", 8*i, x);
     }
 
-    if (copy_to_user(arg, &version, sizeof(version)))
+    if (copy_to_user(arg, &afu_id, sizeof(afu_id)))
         return -EFAULT;
 
     return 0;
@@ -245,8 +250,8 @@ static long vai_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
     printk("vai: ioctl\n");
 
     switch (cmd) {
-    case VAI_GET_AFU_VERSION:
-        return vai_ioctl_get_version((void __user *)arg);
+    case VAI_GET_AFU_ID:
+        return vai_ioctl_get_id((void __user *)arg);
     case VAI_DMA_MAP_REGION:
         return vai_ioctl_dma_map_region((void __user *)arg);
     case VAI_DMA_UNMAP_REGION:
@@ -296,6 +301,8 @@ static int vai_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *pci
 
     bar0_start = pci_resource_start(pcidev, 0);
     bar0_end = pci_resource_end(pcidev, 0);
+    pr_info("bar 0 virtual start %llx\n", (uint64_t)mmio);
+    pr_info("bar0 start %llx, bar0 end %llx\n", bar0_start, bar0_end);
     pr_info("length %llx\n", (unsigned long long)(bar0_end + 1 - bar0_start));
 
     device = device_create(class, NULL, dev, NULL, "vai");

@@ -3,13 +3,15 @@
 #include <unistd.h>
 #include <string.h>
 #include <linux/ioctl.h>
+#include <inttypes.h>
+#include <stdlib.h>
 
 #include "vai_types.h"
 
 struct vai_afu_conn *vai_afu_connect(const char *file_path)
 {
     struct vai_afu_conn *conn = NULL;
-    struct vai_afu_version version;
+    afu_id_t afu_id;
     int ret;
 
     if (!file_path)
@@ -23,14 +25,13 @@ struct vai_afu_conn *vai_afu_connect(const char *file_path)
     if (conn->fd < 0)
         goto err_free_conn;
 
-    ret = ioctl(conn->fd, VAI_GET_AFU_VERSION, &version);
+    ret = ioctl(conn->fd, VAI_GET_AFU_ID, &afu_id);
     if (ret) {
         printf("vai: ioctl returns %d\n", ret);
         goto err_close_fd;
     }
 
-    conn->afu_id = version.afu_id;
-    conn->vai_afu_version = version.vai_afu_version;
+    conn->afu_id = afu_id;
     conn->desc = NULL;
 
     return conn;
@@ -103,25 +104,3 @@ err_out:
     return -1;
 }
 
-int vai_afu_submit_task(struct vai_afu_conn *conn,
-            struct vai_user_task_entry *task)
-{
-    int ret;
-
-    ret = ioctl(conn->fd, VAI_TASK_SUBMIT, task);
-    if (ret) {
-        printf("vai: ioctl returns %d\n", ret);
-        goto err_out;
-    }
-
-    return 0;
-
-err_out:
-    return -1;
-}
-
-int vai_afu_pull_task(struct vai_afu_conn *conn,
-            struct vai_user_task_entry **tasks)
-{
-    return ioctl(conn->fd, VAI_PULL_TASK, tasks);
-}

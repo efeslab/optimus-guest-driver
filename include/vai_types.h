@@ -1,7 +1,11 @@
 #ifndef _VAI_TYPES_H_
 #define _VAI_TYPES_H_
 
+#ifdef __KERNEL__
 #include <linux/types.h>
+#else
+#include <inttypes.h>
+#endif
 
 #define CL_SIZE 64
 #define CL(x) CL_SIZE*(x)
@@ -19,21 +23,10 @@ typedef struct {
     uint8_t data[16];
 } afu_id_t;
 
-typedef struct {
-    uint8_t data[16];
-} afu_version_t;
-
 struct vai_afu_conn {
     int fd;
     afu_id_t afu_id;
-    afu_version_t afu_version;
     char *desc;
-};
-
-
-struct vai_afu_version {
-    afu_id_t afu_id;
-    afu_version_t afu_version;
 };
 
 /**
@@ -42,7 +35,7 @@ struct vai_afu_version {
  * Report the version of the driver API by entering the field in the given struct.
  * Return: 0 on success, -errno on failure.
  */
-#define VAI_GET_AFU_VERSION _IO(VAI_MAGIC, VAI_BASE + 0)
+#define VAI_GET_AFU_ID _IO(VAI_MAGIC, VAI_BASE + 0)
 
 
 struct vai_map_info {
