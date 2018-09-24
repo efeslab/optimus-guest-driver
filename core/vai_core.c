@@ -116,10 +116,17 @@ static long vai_ioctl_get_id(void __user *arg)
 }
 
 struct pinned_page {
-    uint64_t gfn;
+    uint64_t vfn;
     struct page *page;
     struct hlist_node node;
 };
+
+static void vai_dma_notify_page(uint64_t vfn, uint64_t pfn)
+{
+    uint64_t *reg = (uint64_t*)mmio;
+
+    *reg = pfn;
+}
 
 static long vai_dma_pin_pages(struct vai_map_info *info)
 {
@@ -134,25 +141,29 @@ static long vai_dma_pin_pages(struct vai_map_info *info)
 
     for (i=0; i<npages; i++) {
         struct pinned_page *pg = kzalloc(sizeof(*pg), GFP_KERNEL);
-        uint64_t gfn = (info->user_addr >> PAGE_SHIFT) + i;
+        uint64_t vfn = (info->user_addr >> PAGE_SHIFT) + i;
 
         pinned = get_user_pages_fast(info->user_addr+i*PAGE_SIZE, 1, 1, &pg->page);
         if (pinned != 1)
             goto err;
 
-        pg->gfn = gfn;
+        printk("vai: vfn: %llx ==> pfn: %lx\n", vfn, page_to_pfn(pg->page));
+
+        vai_dma_notify_page(vfn, page_to_pfn(pg->page));
+
+        pg->vfn = vfn;
         all_pinned += pinned;
-        hash_add(pinned_pages, &pg->node, gfn);
+        hash_add(pinned_pages, &pg->node, vfn);
     }
 
     return all_pinned;
 
 err:
     for (i=0; i<all_pinned; i++) {
-        uint64_t gfn = (info->user_addr >> PAGE_SHIFT) + i;
+        uint64_t vfn = (info->user_addr >> PAGE_SHIFT) + i;
 
-        hash_for_each_possible(pinned_pages, tmp, node, gfn) {
-            if (gfn == tmp->gfn) {
+        hash_for_each_possible(pinned_pages, tmp, node, vfn) {
+            if (vfn == tmp->vfn) {
                 put_page(tmp->page);
             }
         }
@@ -168,10 +179,10 @@ static long vai_dma_unpin_pages(struct vai_map_info *info)
     long i;
 
     for (i=0; i<npages; i++) {
-        uint64_t gfn = (info->user_addr >> PAGE_SHIFT) + i;
+        uint64_t vfn = (info->user_addr >> PAGE_SHIFT) + i;
 
-        hash_for_each_possible(pinned_pages, tmp, node, gfn) {
-            if (gfn == tmp->gfn) {
+        hash_for_each_possible(pinned_pages, tmp, node, vfn) {
+            if (vfn == tmp->vfn) {
                 put_page(tmp->page);
             }
         }
