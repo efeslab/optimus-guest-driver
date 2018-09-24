@@ -54,8 +54,11 @@
 #define VAI_STRING_LEN		16
 
 #define VAI_CONFIG_SPACE_SIZE  0xff
-#define VAI_IO_BAR_SIZE        0x8
+#define VAI_IO_BAR_SIZE        0x20
 #define VAI_MMIO_BAR_SIZE      0x100000
+
+#define LOAD_LE16(addr, val)   (val = *(u16 *)addr)
+#define LOAD_LE32(addr, val)   (val = *(u32 *)addr)
 
 #define STORE_LE16(addr, val)   (*(u16 *)addr = val)
 #define STORE_LE32(addr, val)   (*(u32 *)addr = val)
@@ -97,6 +100,7 @@ struct mdev_state {
 	struct eventfd_ctx *msi_evtfd;
 	int irq_index;
 	u8 *vconfig;
+    u8 *vbar0;
 	struct mutex ops_lock;
 	struct mdev_device *mdev;
 	struct mdev_region_info region_info[VFIO_PCI_NUM_REGIONS];
@@ -164,6 +168,7 @@ int vai_create(struct kobject *kobj, struct mdev_device *mdev)
     mdev_state->irq_index = -1;
     mutex_init(&mdev_state->rxtx_lock);
     mdev_state->vconfig = kzalloc(VAI_CONFIG_SPACE_SIZE, GFP_KERNEL);
+    mdev_state->vbar0 = kzalloc(VAI_IO_BAR_SIZE, GFP_KERNEL);
 
     if (mdev_state->vconfig == NULL) {
         kfree(mdev_state);
@@ -196,6 +201,7 @@ int vai_remove(struct mdev_device *mdev)
 			list_del(&mdev_state->next);
 			mdev_set_drvdata(mdev, NULL);
 			kfree(mdev_state->vconfig);
+			kfree(mdev_state->vbar0);
 			kfree(mdev_state);
 			ret = 0;
 			break;
@@ -266,11 +272,14 @@ static void handle_pci_cfg_write(struct mdev_state *mdev_state, u16 offset,
 static void handle_bar_write(unsigned int index, struct mdev_state *mdev_state,
                 u16 offset, char *buf, u32 count)
 {
+    u32 data32;
 
     switch (offset) {
-    case VAI_REG_PAGE_TABLE_ROOT:
+    case 0x0:
+    case 0x4:
     {
-        pr_info("vai: set page table root...\n");
+        data32 = *(u32*)buf;
+        STORE_LE32(&mdev_state->vbar0[offset], data32);
         break;
     }
     default:
@@ -281,7 +290,16 @@ static void handle_bar_write(unsigned int index, struct mdev_state *mdev_state,
 static void handle_bar_read(unsigned int index, struct mdev_state *mdev_state,
                 u16 offset, char *buf, u32 count)
 {
+    u32 data32;
+
     switch (offset) {
+    case 0x0:
+    case 0x4:
+    {
+        data32 = *(u32*)buf;
+        LOAD_LE32(&mdev_state->vbar0[offset], data32);
+        break;
+    }
     default:
         break;
     }
@@ -290,13 +308,12 @@ static void handle_bar_read(unsigned int index, struct mdev_state *mdev_state,
 static void dump_buffer(char *buf, uint32_t count)
 {
 	int i;
+    uint32_t *x = (uint32_t*)buf;
 
-	pr_info("Buffer: ");
-	for (i = 0; i < count; i++) {
-		pr_info("%2x ", *(buf + i));
-		if ((i + 1) % 16 == 0)
-			pr_info("\n");
-	}
+    for (i = 0; i < count; i+=4) {
+        pr_info("buffer: %x\n", *x);
+        x = (uint32_t*)(buf+i);
+    }
 }
 
 static void mdev_read_base(struct mdev_state *mdev_state)
