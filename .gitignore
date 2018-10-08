@@ -108,3 +108,4 @@ localversion
 kernel/x509_certificate_list
 
 vai_app
+tools/

@@ -80,4 +80,18 @@ struct vai_user_task_entry {
  */
 #define VAI_PULL_TASK _IO(VAI_MAGIC, VAI_BASE + 4)
 
+
+#define VAI_ACCELERATOR_L 0x0
+#define VAI_ACCELERATOR_H 0x8
+#define VAI_PAGING_NOTIFY_MAP_ADDR 0x10
+#define VAI_PAGING_NOTIFY_MAP 0x18
+
+#define VAI_NOTIFY_DO_MAP 0x0
+#define VAI_NOTIFY_DO_UNMAP 0x1
+
+struct vai_paging_notifier {
+    uint64_t va;
+    uint64_t pa;
+};
+
 #endif /* _VAI_TYPES_H_ */
