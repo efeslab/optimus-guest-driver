@@ -31,6 +31,8 @@ DEFINE_MUTEX(io_lock);
 
 struct hlist_head pinned_pages[12];
 
+struct vai_paging_notifier paging_notifier;
+
 #define VAI_VENDOR_ID 0xdead
 #define VAI_DEVICE_ID 0xbeef
 
@@ -40,7 +42,20 @@ static struct pci_device_id vai_pci_ids[] = {
 };
 MODULE_DEVICE_TABLE(pci, vai_pci_ids);
 
-static long vai_read_mmio(int offset)
+#if 0
+static uint32_t vai_read32_mmio(int offset)
+{
+    u32 ret;
+
+    mutex_lock(&io_lock);
+    ret = readl((uint8_t *)mmio + offset);
+    mutex_unlock(&io_lock);
+
+    return ret;
+}
+#endif
+
+static uint64_t vai_read64_mmio(int offset)
 {
     long ret;
 
@@ -50,6 +65,22 @@ static long vai_read_mmio(int offset)
 
     return ret;
 }
+
+static void vai_write32_mmio(int offset, uint32_t val)
+{
+    mutex_lock(&io_lock);
+    writel(val, (uint8_t *)mmio + offset);
+    mutex_unlock(&io_lock);
+}
+
+#if 0
+static void vai_write64_mmio(int offset, uint64_t val)
+{
+    mutex_lock(&io_lock);
+    writeq(val, (uint8_t *)mmio + offset);
+    mutex_unlock(&io_lock);
+}
+#endif
 
 static int vai_open(struct inode *in, struct file *f)
 {
@@ -104,7 +135,7 @@ static long vai_ioctl_get_id(void __user *arg)
     int i;
 
     for (i=0 ; i<2; i++) {
-        uint64_t x = vai_read_mmio(8*i);
+        uint64_t x = vai_read64_mmio(VAI_ACCELERATOR_L + 8*i);
         *(ptr+i) = x;
         printk("vai: mmio read %x: %llx\n", 8*i, x);
     }
@@ -121,18 +152,26 @@ struct pinned_page {
     struct hlist_node node;
 };
 
-static void vai_dma_notify_page(uint64_t vfn, uint64_t pfn)
+static void vai_dma_notify_page_map(uint64_t vfn, uint64_t pfn)
 {
-    uint64_t *reg = (uint64_t*)mmio;
+    paging_notifier.va = vfn << PAGE_SHIFT;
+    paging_notifier.pa = pfn << PAGE_SHIFT;
 
-    *reg = pfn;
+    vai_write32_mmio(VAI_PAGING_NOTIFY_MAP, VAI_NOTIFY_DO_MAP);
+}
+
+static void vai_dma_notify_page_unmap(uint64_t vfn)
+{
+    paging_notifier.va = vfn << PAGE_SHIFT;
+
+    vai_write32_mmio(VAI_PAGING_NOTIFY_MAP, VAI_NOTIFY_DO_UNMAP);
 }
 
 static long vai_dma_pin_pages(struct vai_map_info *info)
 {
     long npages, i;
     long pinned, all_pinned=0;
-    struct pinned_page *tmp;
+    struct pinned_page *tmp, *res = NULL;
 
     if (!info)
         return -EFAULT;
@@ -149,7 +188,7 @@ static long vai_dma_pin_pages(struct vai_map_info *info)
 
         printk("vai: vfn: %llx ==> pfn: %lx\n", vfn, page_to_pfn(pg->page));
 
-        vai_dma_notify_page(vfn, page_to_pfn(pg->page));
+        vai_dma_notify_page_map(vfn, page_to_pfn(pg->page));
 
         pg->vfn = vfn;
         all_pinned += pinned;
@@ -164,8 +203,16 @@ err:
 
         hash_for_each_possible(pinned_pages, tmp, node, vfn) {
             if (vfn == tmp->vfn) {
-                put_page(tmp->page);
+                res = tmp;
+                break;
             }
+        }
+
+        if (res) {
+            vai_dma_notify_page_unmap(res->vfn);
+            hash_del(&res->node);
+            put_page(res->page);
+            kfree(res);
         }
     }
 
@@ -175,7 +222,7 @@ err:
 static long vai_dma_unpin_pages(struct vai_map_info *info)
 {
     long npages = info->length >> PAGE_SHIFT;
-    struct pinned_page *tmp;
+    struct pinned_page *tmp, *res = NULL;
     long i;
 
     for (i=0; i<npages; i++) {
@@ -183,25 +230,22 @@ static long vai_dma_unpin_pages(struct vai_map_info *info)
 
         hash_for_each_possible(pinned_pages, tmp, node, vfn) {
             if (vfn == tmp->vfn) {
-                put_page(tmp->page);
+                res = tmp;
+                break;
             }
+        }
+
+        if (res) {
+            vai_dma_notify_page_unmap(res->vfn);
+            hash_del(&res->node);
+            put_page(res->page);
+            kfree(res);
         }
     }
 
     return 0;
 }
 
-static long vai_page_table_map_pages(struct vai_map_info *info)
-{
-    /* currently do not support page table */
-    return 0;
-}
-
-static long vai_page_table_unmap_pages(struct vai_map_info *info)
-{
-    return 0;
-}
-       
 static long vai_ioctl_dma_map_region(void __user *arg)
 {
     struct vai_map_info info;
@@ -223,8 +267,6 @@ static long vai_ioctl_dma_map_region(void __user *arg)
     ret = vai_dma_pin_pages(&info);
     if (ret)
         return -EINVAL;
-
-    vai_page_table_map_pages(&info);
 
     return 0;
 }
@@ -250,8 +292,6 @@ static long vai_ioctl_dma_unmap_region(void __user *arg)
     ret = vai_dma_unpin_pages(&info);
     if (ret)
         return -EINVAL;
-
-    vai_page_table_unmap_pages(&info);
 
     return 0;
 }
@@ -279,6 +319,16 @@ static struct file_operations vai_fops = {
     .unlocked_ioctl = vai_ioctl,
     .mmap = vai_mmap
 };
+
+static void vai_initialize_paging_notifier(void)
+{
+    void *va = &paging_notifier;
+    u64 pa = virt_to_phys(va);
+
+    printk("vai: pg notifier va %llx pa %llx\n", (u64)va, pa);
+
+    writeq(pa, mmio + VAI_PAGING_NOTIFY_MAP_ADDR);
+}
 
 static int vai_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *pcidevid)
 {
@@ -321,6 +371,8 @@ static int vai_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *pci
         pr_err("vai: error in creating device\n");
         goto err_release_region;
     }
+
+    vai_initialize_paging_notifier();
 
     return 0;
 
