@@ -37,6 +37,8 @@ int main(void)
     info.length = 4096;
 
     ioctl(fd, VAI_DMA_MAP_REGION, &info);
+
+    bar[2] = 0;
     
     close(fd);
 

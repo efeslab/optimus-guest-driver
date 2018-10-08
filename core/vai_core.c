@@ -31,8 +31,8 @@ DEFINE_MUTEX(io_lock);
 
 struct hlist_head pinned_pages[12];
 
-#define VAI_VENDOR_ID 0xdead
-#define VAI_DEVICE_ID 0xbeef
+#define VAI_VENDOR_ID 0xbeef
+#define VAI_DEVICE_ID 0xdead
 
 static struct pci_device_id vai_pci_ids[] = {
 	{ PCI_DEVICE(VAI_VENDOR_ID, VAI_DEVICE_ID), },

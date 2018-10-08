@@ -119,7 +119,7 @@ struct list_head mdev_devices_list;
 static void vai_create_config_space(struct mdev_state *mdev_state)
 {
 	/* PCI dev ID */
-	STORE_LE32((u32 *) &mdev_state->vconfig[0x0], 0xbeefdead);
+	STORE_LE32((u32 *) &mdev_state->vconfig[0x0], 0xdeadbeef);
 
 	/* Control: I/O+, Mem-, BusMaster- */
 	STORE_LE16((u16 *) &mdev_state->vconfig[0x4], 0x0001);
