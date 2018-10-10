@@ -34,7 +34,7 @@ struct hlist_head pinned_pages[12];
 #define VAI_VENDOR_ID 0xbeef
 #define VAI_DEVICE_ID 0xdead
 
-struct vai_paging_notifier paging_notifier;
+struct vai_paging_notifier *paging_notifier;
 
 static struct pci_device_id vai_pci_ids[] = {
 	{ PCI_DEVICE(VAI_VENDOR_ID, VAI_DEVICE_ID), },
@@ -154,15 +154,15 @@ struct pinned_page {
 
 static void vai_dma_notify_page_map(uint64_t vfn, uint64_t pfn)
 {
-    paging_notifier.va = vfn << PAGE_SHIFT;
-    paging_notifier.pa = pfn << PAGE_SHIFT;
+    paging_notifier->va = vfn << PAGE_SHIFT;
+    paging_notifier->pa = pfn << PAGE_SHIFT;
 
     vai_write32_mmio(VAI_PAGING_NOTIFY_MAP, VAI_NOTIFY_DO_MAP);
 }
 
 static void vai_dma_notify_page_unmap(uint64_t vfn)
 {
-    paging_notifier.va = vfn << PAGE_SHIFT;
+    paging_notifier->va = vfn << PAGE_SHIFT;
 
     vai_write32_mmio(VAI_PAGING_NOTIFY_MAP, VAI_NOTIFY_DO_UNMAP);
 }
@@ -322,8 +322,10 @@ static struct file_operations vai_fops = {
 
 static void vai_initialize_paging_notifier(void)
 {
-    void *va = &paging_notifier;
+    void *va = kzalloc(sizeof(*paging_notifier), GFP_KERNEL);
     u64 pa = virt_to_phys(va);
+
+    paging_notifier = va;
 
     printk("vai: pg notifier va %llx pa %llx\n", (u64)va, pa);
 

@@ -16,7 +16,6 @@ int main(void)
 
     void *ptr;
     uint32_t *bar;
-    uint32_t a;
 
     void *test_map;
 
@@ -27,10 +26,6 @@ int main(void)
     ptr = mmap(NULL, 8, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     bar = ptr;
 
-    a = *bar; 
-
-    printf("a: %u\n", a);
-
     test_map = mmap((void*)0x10000, 4096, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     printf("addr: %llx\n", test_map);
     info.user_addr = (uint64_t)test_map;
@@ -38,8 +33,8 @@ int main(void)
 
     ioctl(fd, VAI_DMA_MAP_REGION, &info);
 
-    bar[2] = 0;
-    
+    printf("test_msg: %s\n", (char *)test_map);
+
     close(fd);
 
     return 0;
