@@ -20,10 +20,11 @@ static dev_t dev;
 static struct cdev cdev;
 static struct pci_dev *pdev;
 static struct device *device;
-static void __iomem *mmio;
+static void __iomem *mmio_bar0;
+static void __iomem *mmio_bar2;
 static struct class *class;
-resource_size_t bar0_start;
-resource_size_t bar0_end;
+resource_size_t bar0_start, bar0_end;
+resource_size_t bar2_start, bar2_end;
 
 static int open_cnt;
 DEFINE_MUTEX(open_cnt_lock);
@@ -37,8 +38,8 @@ struct hlist_head pinned_pages[12];
 struct vai_paging_notifier *paging_notifier;
 
 static struct pci_device_id vai_pci_ids[] = {
-	{ PCI_DEVICE(VAI_VENDOR_ID, VAI_DEVICE_ID), },
-	{ 0, }
+    { PCI_DEVICE(VAI_VENDOR_ID, VAI_DEVICE_ID), },
+    { 0, }
 };
 MODULE_DEVICE_TABLE(pci, vai_pci_ids);
 
@@ -60,27 +61,25 @@ static uint64_t vai_read64_mmio(int offset)
     long ret;
 
     mutex_lock(&io_lock);
-    ret = readq((uint8_t *)mmio + offset);
+    ret = readq((uint8_t *)mmio_bar0 + offset);
     mutex_unlock(&io_lock);
 
     return ret;
 }
 
-static void vai_write32_mmio(int offset, uint32_t val)
+static void vai_b1w32_mmio(int offset, uint32_t val)
 {
     mutex_lock(&io_lock);
-    writel(val, (uint8_t *)mmio + offset);
+    writel(val, (uint8_t *)mmio_bar2 + offset);
     mutex_unlock(&io_lock);
 }
 
-#if 0
-static void vai_write64_mmio(int offset, uint64_t val)
+static void vai_b1w64_mmio(int offset, uint64_t val)
 {
     mutex_lock(&io_lock);
-    writeq(val, (uint8_t *)mmio + offset);
+    writeq(val, (uint8_t *)mmio_bar2 + offset);
     mutex_unlock(&io_lock);
 }
-#endif
 
 static int vai_open(struct inode *in, struct file *f)
 {
@@ -157,14 +156,14 @@ static void vai_dma_notify_page_map(uint64_t vfn, uint64_t pfn)
     paging_notifier->va = vfn << PAGE_SHIFT;
     paging_notifier->pa = pfn << PAGE_SHIFT;
 
-    vai_write32_mmio(VAI_PAGING_NOTIFY_MAP, VAI_NOTIFY_DO_MAP);
+    vai_b1w64_mmio(VAI_PAGING_NOTIFY_MAP, VAI_NOTIFY_DO_MAP);
 }
 
 static void vai_dma_notify_page_unmap(uint64_t vfn)
 {
     paging_notifier->va = vfn << PAGE_SHIFT;
 
-    vai_write32_mmio(VAI_PAGING_NOTIFY_MAP, VAI_NOTIFY_DO_UNMAP);
+    vai_b1w64_mmio(VAI_PAGING_NOTIFY_MAP, VAI_NOTIFY_DO_UNMAP);
 }
 
 static long vai_dma_pin_pages(struct vai_map_info *info)
@@ -296,6 +295,23 @@ static long vai_ioctl_dma_unmap_region(void __user *arg)
     return 0;
 }
 
+static long vai_ioctl_set_mem_base(void __user *arg)
+{
+    uint64_t mem_base;
+    if (copy_from_user(&mem_base, arg, sizeof(mem_base)))
+        return -EFAULT;
+    vai_b1w64_mmio(VAI_MEM_BASE, mem_base);
+    printk("vai: set membase to %#llx\n", mem_base);
+    return 0;
+}
+
+static long vai_ioctl_set_reset(void __user *arg)
+{
+    vai_b1w64_mmio(VAI_RESET, VAI_RESET_ENABLE);
+    printk("vai: reset\n");
+    return 0;
+}
+
 static long vai_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 {
     printk("vai: ioctl\n");
@@ -307,6 +323,10 @@ static long vai_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
         return vai_ioctl_dma_map_region((void __user *)arg);
     case VAI_DMA_UNMAP_REGION:
         return vai_ioctl_dma_unmap_region((void __user *)arg);
+    case VAI_SET_MEM_BASE:
+        return vai_ioctl_set_mem_base((void __user *)arg);
+    case VAI_SET_RESET:
+        return vai_ioctl_set_reset((void __user*)arg);
     }
 
     return -EINVAL;
@@ -329,7 +349,7 @@ static void vai_initialize_paging_notifier(void)
 
     printk("vai: pg notifier va %llx pa %llx\n", (u64)va, pa);
 
-    writeq(pa, mmio + VAI_PAGING_NOTIFY_MAP_ADDR);
+    vai_b1w64_mmio(VAI_PAGING_NOTIFY_MAP_ADDR, (uint64_t)va);
 }
 
 static int vai_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *pcidevid)
@@ -360,13 +380,19 @@ static int vai_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *pci
         goto err_unregister_chrdev;
     }
 
-    mmio = pci_iomap(pcidev, 0, pci_resource_len(pcidev, 0));
+    mmio_bar0 = pci_iomap(pcidev, 0, pci_resource_len(pcidev, 0));
+    mmio_bar2 = pci_iomap(pcidev, 2, pci_resource_len(pcidev, 2));
 
     bar0_start = pci_resource_start(pcidev, 0);
     bar0_end = pci_resource_end(pcidev, 0);
-    pr_info("bar 0 virtual start %llx\n", (uint64_t)mmio);
+    bar2_start = pci_resource_start(pcidev, 2);
+    bar2_end = pci_resource_end(pcidev, 2);
+    pr_info("bar 0 virtual start %llx\n", (uint64_t)mmio_bar0);
     pr_info("bar0 start %llx, bar0 end %llx\n", bar0_start, bar0_end);
     pr_info("length %llx\n", (unsigned long long)(bar0_end + 1 - bar0_start));
+    pr_info("bar2 virtual start %llx\n", (uint64_t)mmio_bar2);
+    pr_info("bar2 start %llx, bar0 end %llx\n", bar2_start, bar2_end);
+    pr_info("length %llx\n", (unsigned long long)(bar2_end + 1 - bar2_start));
 
     device = device_create(class, NULL, dev, NULL, "vai");
     if (IS_ERR(device)) {
