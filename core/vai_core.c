@@ -349,7 +349,7 @@ static void vai_initialize_paging_notifier(void)
 
     printk("vai: pg notifier va %llx pa %llx\n", (u64)va, pa);
 
-    vai_b1w64_mmio(VAI_PAGING_NOTIFY_MAP_ADDR, (uint64_t)va);
+    vai_b1w64_mmio(VAI_PAGING_NOTIFY_MAP_ADDR, (uint64_t)pa);
 }
 
 static int vai_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *pcidevid)
