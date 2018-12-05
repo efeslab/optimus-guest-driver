@@ -59,7 +59,6 @@ struct vai_map_info {
  */
 #define VAI_DMA_UNMAP_REGION _IO(VAI_MAGIC, VAI_BASE + 2)
 
-
 struct vai_user_task_entry {
     uint8_t private[VAI_USER_TASK_ENTRY_SIZE];
 };
@@ -80,14 +79,34 @@ struct vai_user_task_entry {
  */
 #define VAI_PULL_TASK _IO(VAI_MAGIC, VAI_BASE + 4)
 
+/**
+ * VAI_SET_MEM_BASE
+ *
+ * Set the start of memory address space allocator will use. It is finally used
+ * by hardware multiplexer.
+ * Return: 0 on success, -errno on failure.
+ */
+#define VAI_SET_MEM_BASE _IO(VAI_MAGIC, VAI_BASE + 5)
+
+/**
+ * VAI_RESET
+ *
+ * Set reset signal to the correspond afu.
+ * Return: 0 on success, -errno on failure.
+ */
+#define VAI_SET_RESET _IO(VAI_MAGIC, VAI_BASE + 6)
+
 
 #define VAI_ACCELERATOR_L 0x0
 #define VAI_ACCELERATOR_H 0x8
-#define VAI_PAGING_NOTIFY_MAP_ADDR 0x10
-#define VAI_PAGING_NOTIFY_MAP 0x18
+#define VAI_PAGING_NOTIFY_MAP_ADDR 0x0
+#define VAI_PAGING_NOTIFY_MAP 0x8
+#define VAI_MEM_BASE 0x10
+#define VAI_RESET 0x18
 
 #define VAI_NOTIFY_DO_MAP 0x0
 #define VAI_NOTIFY_DO_UNMAP 0x1
+#define VAI_RESET_ENABLE 0x1
 
 struct vai_paging_notifier {
     uint64_t va;

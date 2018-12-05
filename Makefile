@@ -12,10 +12,10 @@ fake-hv-y := fake_hv/vai_mdev.o
 
 all: module
 
-app:
-	gcc -c lib/libvai.c -Wno-unused-value -Wno-unused-label -I$(PWD)/include
-	gcc -c test/vai_app.c -Wno-unused-value -Wno-unused-label -I$(PWD)/include
-	gcc -o app vai_app.o libvai.o -Wno-unused-value -Wno-unused-label -I$(PWD)/include
+app: lib/libvai.c test/vai_app.c
+	gcc -g -c lib/libvai.c -Wno-unused-value -Wno-unused-label -I$(PWD)/include
+	gcc -g -c test/vai_app.c -Wno-unused-value -Wno-unused-label -I$(PWD)/include
+	gcc -g -o app vai_app.o libvai.o -Wno-unused-value -Wno-unused-label -I$(PWD)/include
 
 module:
 	echo $(PWD)
