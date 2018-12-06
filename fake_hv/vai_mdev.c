@@ -62,6 +62,7 @@
 
 #define STORE_LE16(addr, val)   (*(u16 *)addr = val)
 #define STORE_LE32(addr, val)   (*(u32 *)addr = val)
+#define STORE_LE64(addr, val)   (*(u64 *)addr = val)
 
 #define CIRCULAR_BUF_INC_IDX(idx)    (idx = (idx + 1) & (MAX_FIFO_SIZE - 1))
 
