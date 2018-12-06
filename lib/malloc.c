@@ -1,3 +1,5 @@
+#include "libvai.h"
+#include "malloc.h"
 /*
   This is a version (aka dlmalloc) of malloc/free/realloc written by
   Doug Lea and released to the public domain, as explained at
@@ -1282,7 +1284,7 @@ typedef void* mspace;
   compiling with a different DEFAULT_GRANULARITY or dynamically
   setting with mallopt(M_GRANULARITY, value).
 */
-DLMALLOC_EXPORT mspace create_mspace(size_t capacity, int locked);
+DLMALLOC_EXPORT mspace create_mspace(size_t capacity, int locked, struct vai_afu_conn *conn);
 
 /*
   destroy_mspace destroys the given space, and attempts to return all
@@ -2599,6 +2601,7 @@ struct malloc_state {
   msegment   seg;
   void*      extp;      /* Unused but available for extensions */
   size_t     exts;
+  struct vai_afu_conn *conn;
 };
 
 typedef struct malloc_state*    mstate;
@@ -3550,7 +3553,7 @@ static void internal_malloc_stats(mstate m) {
     fprintf(stderr, "max system bytes = %10lu\n", (unsigned long)(maxfp));
     fprintf(stderr, "system bytes     = %10lu\n", (unsigned long)(fp));
     fprintf(stderr, "in use bytes     = %10lu\n", (unsigned long)(used));
-	fprintf(stderr, "first seg base %p, size %zu, next %p\n", m->seg.base, m->seg.size, m->seg.next);
+    fprintf(stderr, "first seg base %p, size %zu, next %p\n", m->seg.base, m->seg.size, m->seg.next);
   }
 }
 #endif /* NO_MALLOC_STATS */
@@ -4140,18 +4143,25 @@ static void* sys_alloc(mstate m, size_t nb) {
   }
 
   if (HAVE_MMAP && tbase == CMFAIL) {  /* Try MMAP */
-	if (!is_initialized(m)) { //initialize large 64GB mmap
-		m->seg.base = mmap(NULL, MMAP_RESERVE_VMSPACE_SIZE, PROT_NONE,
-				MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-		m->seg.size = 0;
-		if (m->seg.base == MAP_FAILED) {
-			goto MMAP_SKIP;
-		}
-	}
+    if (!is_initialized(m)) { //initialize large 64GB mmap
+        m->seg.base = mmap(NULL, MMAP_RESERVE_VMSPACE_SIZE, PROT_NONE,
+                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        m->seg.size = 0;
+        if (m->seg.base == MAP_FAILED) {
+            goto MMAP_SKIP;
+        }
+        else
+            vai_afu_set_mem_base(m->conn, (uint64_t)m->seg.base);
+    }
     //char* mp = (char*)(CALL_MMAP(asize));
-	char *mp = m->seg.base + m->seg.size;
-	int ret = mprotect(mp, asize, MMAP_PROT);
-    if (ret != -1) {
+    char *mp = m->seg.base + m->seg.size;
+    int ret_mp = mprotect(mp, asize, MMAP_PROT);
+    int ret_vmap;
+    if (ret_mp != -1)
+        ret_vmap = vai_afu_map_region(m->conn, (uint64_t)mp, asize);
+    else
+        ret_vmap = -1;
+    if (ret_vmap != -1) {
       tbase = mp;
       tsize = asize;
       mmap_flag = USE_MMAP_BIT;
@@ -4324,8 +4334,8 @@ static int sys_trim(mstate m, size_t pad) {
             /* Prefer mremap, fall back to munmap */
             //if ((CALL_MREMAP(sp->base, sp->size, newsize, 0) != MFAIL) ||
             //    (CALL_MUNMAP(sp->base + newsize, extra) == 0)) {
-			if ((mprotect(sp->base + newsize, extra, PROT_NONE) != -1) &&
-				(madvise(sp->base + newsize, extra, MADV_DONTNEED) != -1)) {
+            if ((mprotect(sp->base + newsize, extra, PROT_NONE) != -1) &&
+                (madvise(sp->base + newsize, extra, MADV_DONTNEED) != -1)) {
               released = extra;
             }
           }
@@ -5429,7 +5439,7 @@ static mstate init_user_mstate(char* tbase, size_t tsize) {
   return m;
 }
 
-mspace create_mspace(size_t capacity, int locked) {
+mspace create_mspace(size_t capacity, int locked, struct vai_afu_conn *conn) {
   mstate m = 0;
   size_t msize;
   ensure_initialization();
@@ -5438,13 +5448,23 @@ mspace create_mspace(size_t capacity, int locked) {
     size_t rs = ((capacity == 0)? mparams.granularity :
                  (capacity + TOP_FOOT_SIZE + msize));
     size_t tsize = granularity_align(rs);
-    char* tbase = (char*)(CALL_MMAP(tsize));
-    if (tbase != CMFAIL) {
+    char* tbase = mmap(NULL, MMAP_RESERVE_VMSPACE_SIZE, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    int ret_mpt = mprotect(tbase, tsize, MMAP_PROT);
+    int ret_vmap;
+    if (ret_mpt != -1) {
+        ret_vmap = vai_afu_map_region(conn, (uint64_t)tbase, tsize);
+        vai_afu_set_mem_base(conn, (uint64_t)tbase);
+    }
+    else
+        ret_vmap = -1;
+    //char* tbase = (char*)(CALL_MMAP(tsize));
+    if (ret_vmap != -1) {
       m = init_user_mstate(tbase, tsize);
       m->seg.sflags = USE_MMAP_BIT;
       set_lock(m, locked);
     }
   }
+  m->conn = conn;
   return (mspace)m;
 }
 

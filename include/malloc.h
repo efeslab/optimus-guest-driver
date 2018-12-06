@@ -23,6 +23,17 @@
 #ifndef MALLOC_280_H
 #define MALLOC_280_H
 
+/*                                                                              
+ * configuration                                                                
+ */                                                                             
+#define HAVE_MORECORE 0                                                         
+#define MALLOC_ALIGNMENT 64                                                     
+#define DEFAULT_MMAP_THRESHOLD MAX_SIZE_T                                       
+#define DMMAP_RESERVE_VMSPACE_SIZE (1L<<36)                                     
+#define USE_LOCKS 1                                                             
+#define ONLY_MSPACES 1
+#include <vai_types.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -539,7 +550,7 @@ typedef void* mspace;
   compiling with a different DEFAULT_GRANULARITY or dynamically
   setting with mallopt(M_GRANULARITY, value).
 */
-mspace create_mspace(size_t capacity, int locked);
+mspace create_mspace(size_t capacity, int locked, struct vai_afu_conn *conn);
 
 /*
   destroy_mspace destroys the given space, and attempts to return all

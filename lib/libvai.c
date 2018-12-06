@@ -2,11 +2,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
-#include <linux/ioctl.h>
+#include <sys/ioctl.h>
 #include <inttypes.h>
 #include <stdlib.h>
 
 #include "vai_types.h"
+#include "malloc.h"
 
 struct vai_afu_conn *vai_afu_connect(const char *file_path)
 {
@@ -33,6 +34,7 @@ struct vai_afu_conn *vai_afu_connect(const char *file_path)
 
     conn->afu_id = afu_id;
     conn->desc = NULL;
+	conn->mp = create_mspace(0, 1, conn);
 
     return conn;
 
@@ -104,3 +106,19 @@ err_out:
     return -1;
 }
 
+void vai_afu_set_mem_base(struct vai_afu_conn *conn, uint64_t mem_base) {
+	ioctl(conn->fd, VAI_SET_MEM_BASE, mem_base);
+	// ioctl for set mem_base always return 0, because vai_b1w64_mmio return nothing
+}
+
+void *vai_afu_malloc(struct vai_afu_conn *conn, uint64_t size) {
+	if (!conn)
+		return NULL;
+	else
+		return mspace_malloc(conn->mp, size);
+}
+
+void vai_afu_free(struct vai_afu_conn *conn, void *p) {
+	if (conn)
+		return mspace_free(conn->mp, p);
+}

@@ -51,4 +51,7 @@ int vai_afu_submit_task(struct vai_afu_conn *conn,
 int vai_afu_pull_task(struct vai_afu_conn *conn,
             struct vai_user_task_entry **tasks);
 
+int vai_afu_set_mem_base(struct vai_afu_conn *conn, uint64_t mem_base);
+void *vai_afu_malloc(struct vai_afu_conn *conn, uint64_t size);
+void vai_afu_free(struct vai_afu_conn *conn, void *p);
 #endif /* _LIBVAI_H_ */

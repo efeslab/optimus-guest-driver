@@ -27,6 +27,7 @@ struct vai_afu_conn {
     int fd;
     afu_id_t afu_id;
     char *desc;
+	void *mp;
 };
 
 /**
