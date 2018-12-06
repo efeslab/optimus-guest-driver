@@ -8,7 +8,6 @@ obj-m := vai.o
 obj-m += fake-hv.o
 
 vai-y := core/vai_core.o
-fake-hv-y := fake_hv/vai_mdev.o
 
 all: module
 
@@ -22,4 +21,4 @@ module:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
 clean:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) clean
-	rm app
+	rm -rf app
