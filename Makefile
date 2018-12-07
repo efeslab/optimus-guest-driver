@@ -5,7 +5,6 @@ cflags-y += -Wno-unused-value -Wno-unused-label -I$(PWD)/include
 ccflags-y += -Wno-unused-value -Wno-unused-label -I$(PWD)/include
 
 obj-m := vai.o
-obj-m += fake-hv.o
 
 vai-y := core/vai_core.o
 
