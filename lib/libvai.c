@@ -7,7 +7,7 @@
 #include <inttypes.h>
 #include <stdlib.h>
 
-#include "vai_types.h"
+#include "vai/vai.h"
 #include "malloc.h"
 
 #define MMIO_SPACE_LENGTH 0x100

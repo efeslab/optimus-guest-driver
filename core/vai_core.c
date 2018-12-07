@@ -13,8 +13,8 @@
 #include <linux/uaccess.h>
 #include <linux/mm.h>
 
-#include "vai_internal.h"
-#include "vai_types.h"
+#include "vai/vai_internal.h"
+#include "vai/vai_types.h"
 
 static dev_t dev;
 static struct cdev cdev;

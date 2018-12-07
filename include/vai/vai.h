@@ -1,7 +1,7 @@
 #ifndef _LIBVAI_H_
 #define _LIBVAI_H_
 
-#include "vai_types.h"
+#include "vai/vai_types.h"
 
 /**
  * vai_afu_connect
@@ -51,7 +51,7 @@ int vai_afu_submit_task(struct vai_afu_conn *conn,
 int vai_afu_pull_task(struct vai_afu_conn *conn,
             struct vai_user_task_entry **tasks);
 
-int vai_afu_set_mem_base(struct vai_afu_conn *conn, uint64_t mem_base);
+void vai_afu_set_mem_base(struct vai_afu_conn *conn, uint64_t mem_base);
 volatile void *vai_afu_malloc(struct vai_afu_conn *conn, uint64_t size);
 void vai_afu_free(struct vai_afu_conn *conn, volatile void *p);
 int vai_afu_mmio_read(struct vai_afu_conn *conn, uint64_t offset, volatile uint64_t *value);

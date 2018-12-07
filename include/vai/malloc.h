@@ -32,7 +32,7 @@
 #define DMMAP_RESERVE_VMSPACE_SIZE (1L<<36)                                     
 #define USE_LOCKS 1                                                             
 #define ONLY_MSPACES 1
-#include <vai_types.h>
+#include <vai/vai_types.h>
 
 #ifdef __cplusplus
 extern "C" {

@@ -10,7 +10,8 @@ vai-y := core/vai_core.o
 
 all: module
 
-libvai.so: lib/libvai.c lib/malloc.c include/libvai.h include/malloc.h
+INCLUDE_FILE = include/vai/vai.h include/vai/malloc.h include/vai/vai_types.h
+libvai.so: lib/libvai.c lib/malloc.c ${INCLUDE_FILE}
 	gcc -g -shared -fPIC lib/libvai.c lib/malloc.c -o libvai.so -I${PWD}/include
 app: test/vai_app.c libvai.so
 	gcc -g test/vai_app.c -Wno-unused-value -Wno-unused-label -I$(PWD)/include -L${PWD} -lvai -oapp

@@ -8,8 +8,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#include "vai_types.h"
-
+#include "vai/vai.h"
 struct status_cl {
     uint64_t completion;
     uint64_t n_clk;
