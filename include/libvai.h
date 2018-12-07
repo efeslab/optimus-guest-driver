@@ -54,4 +54,7 @@ int vai_afu_pull_task(struct vai_afu_conn *conn,
 int vai_afu_set_mem_base(struct vai_afu_conn *conn, uint64_t mem_base);
 void *vai_afu_malloc(struct vai_afu_conn *conn, uint64_t size);
 void vai_afu_free(struct vai_afu_conn *conn, void *p);
+int vai_afu_mmio_read(struct vai_afu_conn *conn, uint64_t offset, uint64_t *value);
+int vai_afu_mmio_write(struct vai_afu_conn *conn, uint64_t offset, uint64_t value);
+
 #endif /* _LIBVAI_H_ */

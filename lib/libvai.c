@@ -9,6 +9,7 @@
 #include "vai_types.h"
 #include "malloc.h"
 
+#define MMIO_SPACE_LENGTH 0x100
 struct vai_afu_conn *vai_afu_connect(const char *file_path)
 {
     struct vai_afu_conn *conn = NULL;
@@ -35,6 +36,11 @@ struct vai_afu_conn *vai_afu_connect(const char *file_path)
     conn->afu_id = afu_id;
     conn->desc = NULL;
 	conn->mp = create_mspace(0, 1, conn);
+    conn->bar = (volatile uint64_t *)mmap(NULL, MMIO_SPACE_LENGTH, PROT_READ | PROT_WRITE, MAP_PRIVATE, conn->fd, 0);
+    if (conn->bar == MAP_FAILED) {
+        perror("vai: map mmio bar failed");
+        goto err_close_fd;
+    }
 
     return conn;
 
@@ -50,6 +56,10 @@ void vai_afu_disconnect(struct vai_afu_conn *conn)
 {
     if (!conn)
         return;
+
+    if (conn->bar)
+        if (munmap(conn->bar, MMIO_SPACE_LENGTH) != 0)
+            perror("vai: unmap mmio bar failed");
 
     if (conn->fd >= 0)
         close(conn->fd);
@@ -121,4 +131,18 @@ void *vai_afu_malloc(struct vai_afu_conn *conn, uint64_t size) {
 void vai_afu_free(struct vai_afu_conn *conn, void *p) {
 	if (conn)
 		return mspace_free(conn->mp, p);
+}
+
+int vai_afu_mmio_read(struct vai_afu_conn *conn, uint64_t offset, uint64_t *value) {
+    if (conn == NULL || conn->bar == NULL || offset > MMIO_SPACE_LENGTH)
+        return -1;
+    *value = conn->bar[offset/8];
+    return 0;
+}
+
+int vai_afu_mmio_write(struct vai_afu_conn *conn, uint64_t offsset, uint64_t value) {
+    if (conn == NULL || conn->bar == NULL || offset > MMIO_SPACE_LENGTH)
+        return -1;
+    conn->bar[offset/8] = *value;
+    return 0;
 }
