@@ -21,4 +21,4 @@ module:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
 clean:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) clean
-	rm -rf app
+	rm -rf app libvai.so
