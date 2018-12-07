@@ -8,23 +8,21 @@
 #include <stdlib.h>
 
 #include "vai/vai.h"
-#include "malloc.h"
+#include "vai/malloc.h"
 
 #define MMIO_SPACE_LENGTH 0x100
-struct vai_afu_conn *vai_afu_connect(const char *file_path)
+#define VAI_FILE_PATH "/dev/vai"
+struct vai_afu_conn *vai_afu_connect()
 {
     struct vai_afu_conn *conn = NULL;
     afu_id_t afu_id;
     int ret;
 
-    if (!file_path)
-        return NULL;
-
     conn = malloc(sizeof(*conn));
     if (!conn)
         goto err_out;
 
-    conn->fd = open(file_path, O_RDWR);
+    conn->fd = open(VAI_FILE_PATH, O_RDWR);
     if (conn->fd < 0)
         goto err_free_conn;
 

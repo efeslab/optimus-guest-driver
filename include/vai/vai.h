@@ -9,7 +9,7 @@
  * Connect to an vAFU.
  * Return the vai_afu_conn struct if success, NULL if failed.
  */
-struct vai_afu_conn *vai_afu_connect(const char *file_path);
+struct vai_afu_conn *vai_afu_connect();
 
 /**
  * vai_afu_disconnect
