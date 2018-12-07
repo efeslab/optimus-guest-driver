@@ -295,11 +295,8 @@ static long vai_ioctl_dma_unmap_region(void __user *arg)
     return 0;
 }
 
-static long vai_ioctl_set_mem_base(void __user *arg)
+static long vai_ioctl_set_mem_base(uint64_t mem_base)
 {
-    uint64_t mem_base;
-    if (copy_from_user(&mem_base, arg, sizeof(mem_base)))
-        return -EFAULT;
     vai_b1w64_mmio(VAI_MEM_BASE, mem_base);
     printk("vai: set membase to %#llx\n", mem_base);
     return 0;
@@ -324,7 +321,7 @@ static long vai_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
     case VAI_DMA_UNMAP_REGION:
         return vai_ioctl_dma_unmap_region((void __user *)arg);
     case VAI_SET_MEM_BASE:
-        return vai_ioctl_set_mem_base((void __user *)arg);
+        return vai_ioctl_set_mem_base(arg);
     case VAI_SET_RESET:
         return vai_ioctl_set_reset((void __user*)arg);
     }
