@@ -43,7 +43,7 @@ int main(void)
     info.length = 4096;
 
     uint64_t mem_base = (uint64_t)test_map;
-    ret = ioctl(fd, VAI_SET_MEM_BASE, &mem_base);
+    ret = ioctl(fd, VAI_SET_MEM_BASE, mem_base);
 
     ret = ioctl(fd, VAI_DMA_MAP_REGION, &info);
 
