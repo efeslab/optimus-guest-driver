@@ -194,7 +194,7 @@ static long vai_dma_pin_pages(struct vai_map_info *info)
         hash_add(pinned_pages, &pg->node, vfn);
     }
 
-    return all_pinned;
+    return !(all_pinned == npages);
 
 err:
     for (i=0; i<all_pinned; i++) {
