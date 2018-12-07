@@ -5452,8 +5452,8 @@ mspace create_mspace(size_t capacity, int locked, struct vai_afu_conn *conn) {
     int ret_mpt = mprotect(tbase, tsize, MMAP_PROT);
     int ret_vmap;
     if (ret_mpt != -1) {
-        ret_vmap = vai_afu_map_region(conn, (uint64_t)tbase, tsize);
         vai_afu_set_mem_base(conn, (uint64_t)tbase);
+        ret_vmap = vai_afu_map_region(conn, (uint64_t)tbase, tsize);
     }
     else
         ret_vmap = -1;
@@ -5462,9 +5462,9 @@ mspace create_mspace(size_t capacity, int locked, struct vai_afu_conn *conn) {
       m = init_user_mstate(tbase, tsize);
       m->seg.sflags = USE_MMAP_BIT;
       set_lock(m, locked);
+      m->conn = conn;
     }
   }
-  m->conn = conn;
   return (mspace)m;
 }
 
