@@ -10,10 +10,10 @@ vai-y := core/vai_core.o
 
 all: module
 
-app: lib/libvai.c test/vai_app.c
-	gcc -g -c lib/libvai.c lib/malloc.c -Wno-unused-value -Wno-unused-label -I$(PWD)/include
-	gcc -g -c test/vai_app.c -Wno-unused-value -Wno-unused-label -I$(PWD)/include
-	gcc -g -o app vai_app.o libvai.o malloc.o -Wno-unused-value -Wno-unused-label -I$(PWD)/include
+libvai.so: lib/libvai.c lib/malloc.c include/libvai.h include/malloc.h
+	gcc -g -shared -fPIC lib/libvai.c lib/malloc.c -o libvai.so -I${PWD}/include
+app: test/vai_app.c libvai.so
+	gcc -g test/vai_app.c -Wno-unused-value -Wno-unused-label -I$(PWD)/include -L${PWD} -lvai -oapp
 
 module:
 	echo $(PWD)
