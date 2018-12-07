@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <inttypes.h>
 #include <stdlib.h>
 
@@ -58,7 +59,7 @@ void vai_afu_disconnect(struct vai_afu_conn *conn)
         return;
 
     if (conn->bar)
-        if (munmap(conn->bar, MMIO_SPACE_LENGTH) != 0)
+        if (munmap((void*)conn->bar, MMIO_SPACE_LENGTH) != 0)
             perror("vai: unmap mmio bar failed");
 
     if (conn->fd >= 0)
@@ -121,28 +122,28 @@ void vai_afu_set_mem_base(struct vai_afu_conn *conn, uint64_t mem_base) {
 	// ioctl for set mem_base always return 0, because vai_b1w64_mmio return nothing
 }
 
-void *vai_afu_malloc(struct vai_afu_conn *conn, uint64_t size) {
+volatile void *vai_afu_malloc(struct vai_afu_conn *conn, uint64_t size) {
 	if (!conn)
 		return NULL;
 	else
-		return mspace_malloc(conn->mp, size);
+		return (volatile void *)mspace_malloc(conn->mp, size);
 }
 
-void vai_afu_free(struct vai_afu_conn *conn, void *p) {
+void vai_afu_free(struct vai_afu_conn *conn, volatile void *p) {
 	if (conn)
-		return mspace_free(conn->mp, p);
+		return mspace_free(conn->mp, (void *)p);
 }
 
-int vai_afu_mmio_read(struct vai_afu_conn *conn, uint64_t offset, uint64_t *value) {
+int vai_afu_mmio_read(struct vai_afu_conn *conn, uint64_t offset, volatile uint64_t *value) {
     if (conn == NULL || conn->bar == NULL || offset > MMIO_SPACE_LENGTH)
         return -1;
     *value = conn->bar[offset/8];
     return 0;
 }
 
-int vai_afu_mmio_write(struct vai_afu_conn *conn, uint64_t offsset, uint64_t value) {
+int vai_afu_mmio_write(struct vai_afu_conn *conn, uint64_t offset, uint64_t value) {
     if (conn == NULL || conn->bar == NULL || offset > MMIO_SPACE_LENGTH)
         return -1;
-    conn->bar[offset/8] = *value;
+    conn->bar[offset/8] = value;
     return 0;
 }
