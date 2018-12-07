@@ -35,7 +35,7 @@ struct vai_afu_conn *vai_afu_connect()
     conn->afu_id = afu_id;
     conn->desc = NULL;
 	conn->mp = create_mspace(0, 1, conn);
-    conn->bar = (volatile uint64_t *)mmap(NULL, MMIO_SPACE_LENGTH, PROT_READ | PROT_WRITE, MAP_PRIVATE, conn->fd, 0);
+    conn->bar = (volatile uint64_t *)mmap(NULL, MMIO_SPACE_LENGTH, PROT_READ | PROT_WRITE, MAP_SHARED, conn->fd, 0);
     if (conn->bar == MAP_FAILED) {
         perror("vai: map mmio bar failed");
         goto err_close_fd;
