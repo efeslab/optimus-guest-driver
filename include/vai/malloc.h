@@ -29,7 +29,7 @@
 #define HAVE_MORECORE 0                                                         
 #define MALLOC_ALIGNMENT 64                                                     
 #define DEFAULT_MMAP_THRESHOLD MAX_SIZE_T                                       
-#define DMMAP_RESERVE_VMSPACE_SIZE (1L<<36)                                     
+#define MMAP_RESERVE_VMSPACE_SIZE (1L<<36)
 #define USE_LOCKS 1                                                             
 #define ONLY_MSPACES 1
 #include <vai/vai_types.h>
