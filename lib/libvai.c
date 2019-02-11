@@ -10,7 +10,7 @@
 #include "vai/vai.h"
 #include "vai/malloc.h"
 
-#define MMIO_SPACE_LENGTH 0x100
+#define MMIO_SPACE_LENGTH 0x1000
 #define VAI_FILE_PATH "/dev/vai"
 struct vai_afu_conn *vai_afu_connect()
 {
