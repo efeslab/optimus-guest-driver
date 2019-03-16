@@ -99,8 +99,8 @@ struct vai_user_task_entry {
 #define VAI_SET_RESET _IO(VAI_MAGIC, VAI_BASE + 6)
 
 
-#define VAI_ACCELERATOR_L 0x0
-#define VAI_ACCELERATOR_H 0x8
+#define VAI_ACCELERATOR_L 0x8
+#define VAI_ACCELERATOR_H 0x10
 #define VAI_PAGING_NOTIFY_MAP_ADDR 0x0
 #define VAI_PAGING_NOTIFY_MAP 0x8
 #define VAI_MEM_BASE 0x10
