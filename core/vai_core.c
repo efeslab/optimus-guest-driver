@@ -102,8 +102,10 @@ err_occupied:
 
 static int vai_release(struct inode *in, struct file *f)
 {
-    printk("vai: release device\n");
 
+    vai_ioctl_set_reset(NULL);
+
+    printk("vai: release device\n");
     mutex_lock(&open_cnt_lock);
     open_cnt--;
     mutex_unlock(&open_cnt_lock);
