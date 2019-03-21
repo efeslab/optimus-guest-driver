@@ -100,6 +100,7 @@ err_occupied:
     return -EFAULT;
 }
 
+static long vai_ioctl_set_reset(void __user *arg);
 static int vai_release(struct inode *in, struct file *f)
 {
 
