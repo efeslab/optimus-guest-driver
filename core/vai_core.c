@@ -101,9 +101,11 @@ err_occupied:
 }
 
 static long vai_ioctl_set_reset(void __user *arg);
+static void vai_dma_unpin_all_pages(void);
 static int vai_release(struct inode *in, struct file *f)
 {
 
+    vai_dma_unpin_all_pages();
     vai_ioctl_set_reset(NULL);
 
     printk("vai: release device\n");
@@ -219,6 +221,19 @@ err:
     }
 
     return -EFAULT;
+}
+
+static void vai_dma_unpin_all_pages(void)
+{
+    struct hlist_node *tmp;
+    struct pinned_page *p;
+    int i;
+
+    hash_for_each_safe(pinned_pages, i, tmp, p, node) {
+        put_page(p->page);
+        hash_del(&p->node);
+        kfree(p);
+    }
 }
 
 static long vai_dma_unpin_pages(struct vai_map_info *info)
