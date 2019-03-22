@@ -188,7 +188,7 @@ static long vai_dma_pin_pages(struct vai_map_info *info)
         if (pinned != 1)
             goto err;
 
-        printk("vai: vfn: %llx ==> pfn: %lx\n", vfn, page_to_pfn(pg->page));
+        //printk("vai: vfn: %llx ==> pfn: %lx\n", vfn, page_to_pfn(pg->page));
 
         vai_dma_notify_page_map(vfn, page_to_pfn(pg->page));
 
