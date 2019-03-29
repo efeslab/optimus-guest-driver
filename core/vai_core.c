@@ -13,7 +13,7 @@
 #include <linux/uaccess.h>
 #include <linux/mm.h>
 
-#include "vai/vai_internal.h"
+//#include "vai/vai_internal.h"
 #include "vai/vai_types.h"
 
 static dev_t dev;
@@ -156,6 +156,13 @@ struct pinned_page {
     struct hlist_node node;
 };
 
+struct fast_pin_notifier {
+    uint32_t num_pages;
+    uint32_t behavior;
+    uint64_t gva_start_addr;
+    uint64_t gpas[0];
+};
+
 static void vai_dma_notify_page_map(uint64_t vfn, uint64_t pfn)
 {
     paging_notifier->va = vfn << PAGE_SHIFT;
@@ -223,6 +230,69 @@ err:
     return -EFAULT;
 }
 
+static long vai_dma_pin_pages_batch(struct vai_map_info *info)
+{
+    long npages, i;
+    long pinned;
+    long full_size;
+    struct fast_pin_notifier *notifier = NULL;
+    uint64_t notifier_pa;
+    struct page **pages;
+
+    if (!info)
+        return -EFAULT;
+
+    npages = info->length >> PAGE_SHIFT;
+
+    full_size = sizeof(*notifier) + sizeof(uint64_t) * npages;
+    notifier = kzalloc(full_size, GFP_KERNEL);
+    if (!notifier) {
+        printk("vai: %s: failed to alloc memory\n", __func__);
+        return -ENOMEM;
+    }
+
+    /* set the header of fast paging notifier */
+    notifier->num_pages = npages;
+    notifier->behavior = 0; /* 0 for map */
+    notifier->gva_start_addr = info->user_addr;
+
+    pages = kzalloc(sizeof(struct page *) * npages, GFP_KERNEL);
+    if (!pages) {
+        printk("vai: %s: failed to alloc memory\n", __func__);
+        return -ENOMEM;
+    }
+
+    /* pin the pages and get page struct */
+    pinned = get_user_pages_fast(info->user_addr, npages, 1, pages);
+    if (pinned != npages) {
+        printk("vai: %s: cannot pin pages, expected %ld, pinned %ld\n",
+                    __func__, npages, pinned);
+        return -EFAULT;
+    }
+
+    /* set gpa in notifier and add pinned pages to hash table */
+    for (i = 0; i < npages; i++) {
+        struct pinned_page *pg = kzalloc(sizeof(*pg), GFP_KERNEL);
+        uint64_t vfn = (info->user_addr >> PAGE_SHIFT) + i;
+
+        /* set gpa */
+        notifier->gpas[i] = page_to_pfn(pages[i]) << PAGE_SHIFT;
+
+        pg->vfn = vfn;
+        pg->page = pages[i];
+        hash_add(pinned_pages, &pg->node, vfn);
+    }
+
+    /* do the notification */
+    notifier_pa = virt_to_phys(notifier);
+    vai_b1w64_mmio(VAI_FAST_PAGING_MAP, notifier_pa);
+    
+    kfree(notifier);
+    kfree(pages);
+
+    return 0;
+}
+
 static void vai_dma_unpin_all_pages(void)
 {
     struct hlist_node *tmp;
@@ -263,6 +333,48 @@ static long vai_dma_unpin_pages(struct vai_map_info *info)
     return 0;
 }
 
+static long vai_dma_unpin_pages_batch(struct vai_map_info *info)
+{
+    long npages = info->length >> PAGE_SHIFT;
+    struct pinned_page *tmp, *res = NULL;
+    long i;
+    struct fast_pin_notifier *notifier;
+    uint64_t notifier_pa;
+
+    for (i = 0; i < npages; i++) {
+        uint64_t vfn = (info->user_addr >> PAGE_SHIFT) + i;
+
+        hash_for_each_possible(pinned_pages, tmp, node, vfn) {
+            if (vfn == tmp->vfn) {
+                res = tmp;
+                break;
+            }
+        }
+
+        if (res) {
+            hash_del(&res->node);
+            put_page(res->page);
+            kfree(res);
+        }
+    }
+
+    notifier = kzalloc(sizeof(*notifier), GFP_KERNEL);
+    if (!notifier) {
+        printk("vai: %s: cannot alloc memory\n", __func__);
+        return -ENOMEM;
+    }
+    notifier->num_pages = npages;
+    notifier->behavior = 1;
+    notifier->gva_start_addr = info->user_addr;
+    notifier_pa = virt_to_phys(notifier);
+
+    vai_b1w64_mmio(VAI_FAST_PAGING_MAP, notifier_pa);
+
+    kfree(notifier);
+
+    return 0;
+}
+
 static long vai_ioctl_dma_map_region(void __user *arg)
 {
     struct vai_map_info info;
@@ -281,7 +393,7 @@ static long vai_ioctl_dma_map_region(void __user *arg)
     if (user_addr + length < user_addr)
         return -EINVAL;
 
-    ret = vai_dma_pin_pages(&info);
+    ret = vai_dma_pin_pages_batch(&info);
     if (ret)
         return -EINVAL;
 
@@ -306,7 +418,7 @@ static long vai_ioctl_dma_unmap_region(void __user *arg)
     if (user_addr + length < user_addr)
         return -EINVAL;
 
-    ret = vai_dma_unpin_pages(&info);
+    ret = vai_dma_unpin_pages_batch(&info);
     if (ret)
         return -EINVAL;
 

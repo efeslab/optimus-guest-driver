@@ -105,6 +105,7 @@ struct vai_user_task_entry {
 #define VAI_PAGING_NOTIFY_MAP 0x8
 #define VAI_MEM_BASE 0x10
 #define VAI_RESET 0x18
+#define VAI_FAST_PAGING_MAP 0x38
 
 #define VAI_NOTIFY_DO_MAP 0x0
 #define VAI_NOTIFY_DO_UNMAP 0x1
