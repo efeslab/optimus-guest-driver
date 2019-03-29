@@ -247,7 +247,7 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info)
     full_size = sizeof(*notifier) + sizeof(uint64_t) * npages;
     notifier = kzalloc(full_size, GFP_KERNEL);
     if (!notifier) {
-        printk("vai: %s: failed to alloc memory\n", __func__);
+        printk("vai: %s: failed to alloc memory for notifier: size %ld\n", __func__, full_size);
         return -ENOMEM;
     }
 
@@ -256,9 +256,9 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info)
     notifier->behavior = 0; /* 0 for map */
     notifier->gva_start_addr = info->user_addr;
 
-    pages = kzalloc(sizeof(struct page *) * npages, GFP_KERNEL);
+    pages = vzalloc(sizeof(struct page *) * npages);
     if (!pages) {
-        printk("vai: %s: failed to alloc memory\n", __func__);
+        printk("vai: %s: failed to alloc memory for page list: size %ld\n", __func__, 8*npages);
         return -ENOMEM;
     }
 
