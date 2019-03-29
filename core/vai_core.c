@@ -304,7 +304,7 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info)
     vai_b1w64_mmio(VAI_FAST_PAGING_MAP, notifier_pa);
     
     kfree(notifier);
-    kfree(pages);
+    vfree(pages);
 
     return 0;
 }
