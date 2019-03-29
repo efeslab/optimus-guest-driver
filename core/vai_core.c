@@ -238,6 +238,7 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info)
     struct fast_pin_notifier *notifier = NULL;
     uint64_t notifier_pa;
     struct page **pages;
+    int ret;
 
     if (!info)
         return -EFAULT;
@@ -248,7 +249,22 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info)
     notifier = kzalloc(full_size, GFP_KERNEL);
     if (!notifier) {
         printk("vai: %s: failed to alloc memory for notifier: size %ld\n", __func__, full_size);
-        return -ENOMEM;
+        if (full_size <= PAGE_SIZE)
+            return -ENOMEM;
+
+#define DEFAULT_BATCH_SIZE 508
+        for (i = 0; i < info->length; i += (PAGE_SIZE * DEFAULT_BATCH_SIZE)) {
+            struct vai_map_info new_info;
+
+            new_info.user_addr = info->user_addr + i;
+            new_info.length = (i + PAGE_SIZE * DEFAULT_BATCH_SIZE <= info->length) ?
+                        DEFAULT_BATCH_SIZE * PAGE_SIZE : (info->length - i);
+            ret = vai_dma_pin_pages_batch(&new_info);
+            if (ret)
+                return ret;
+        }
+
+        return 0;
     }
 
     /* set the header of fast paging notifier */
