@@ -13,6 +13,8 @@
 #include <linux/uaccess.h>
 #include <linux/mm.h>
 #include <asm/pgtable_types.h>
+#include <asm/msr.h>
+#include <linux/hugetlb.h>
 
 //#include "vai/vai_internal.h"
 #include "vai/vai_types.h"
@@ -240,7 +242,9 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info)
     uint64_t notifier_pa;
     struct page **pages;
     int ret;
-    int level;
+    unsigned long pgsize;
+    struct vm_area_struct *vma;
+    uint64_t t1, t2;
 
     if (!info)
         return -EFAULT;
@@ -288,9 +292,11 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info)
         return -EFAULT;
     }
 
-    lookup_address(info->user_addr, &level);
-    printk("page size %s\n", level == PG_LEVEL_1G ? "1G" :
-                level == PG_LEVEL_2M ? "2M" : "4K");
+    t1 = rdtsc();
+    vma = find_vma(current->mm, info->user_addr);
+    pgsize = vma_kernel_pagesize(vma);
+    t2 = rdtsc();
+    printk("vai: page size: %#llx, time: %llu\n", pgsize, t2 - t1);
 
     /* set gpa in notifier and add pinned pages to hash table */
     for (i = 0; i < npages; i++) {
