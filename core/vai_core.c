@@ -244,7 +244,7 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
     if (!info)
         return -EFAULT;
 
-    printk("vai: map_info: start_addr=%#llx, len=%d\n", info->user_addr, info->length);
+    printk("vai: map_info: start_addr=%#llx, len=%#llx\n", info->user_addr, info->length);
 
     if (pgsize == 0)
         pgsize = vai_check_page_size(info);
@@ -299,9 +299,9 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
                                 (pgsize == PGSIZE_2M ? PGSIZE_FLAG_2M : PGSIZE_FLAG_1G));
     notifier->gva_start_addr = info->user_addr;
 
-    printk("vai: notifier: num_pages=%d, behavior=%s, pgsize_flag=%s, gva_start_addr\n",
+    printk("vai: notifier: num_pages=%d, behavior=%x, pgsize_flag=%x, gva_start_addr=%#x\n",
                     notifier->num_pages,
-                    notifier-> behavior,
+                    notifier->behavior,
                     notifier->pgsize_flag,
                     notifier->gva_start_addr);
 
