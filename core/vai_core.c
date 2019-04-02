@@ -244,6 +244,8 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
     if (!info)
         return -EFAULT;
 
+    printk("vai: map_info: start_addr=%#llx, len=%d\n", info->user_addr, info->length);
+
     if (pgsize == 0)
         pgsize = vai_check_page_size(info);
 
@@ -297,6 +299,13 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
                                 (pgsize == PGSIZE_2M ? PGSIZE_FLAG_2M : PGSIZE_FLAG_1G));
     notifier->gva_start_addr = info->user_addr;
 
+    printk("vai: notifier: num_pages=%d, behavior=%s, pgsize_flag=%s, gva_start_addr\n",
+                    notifier->num_pages,
+                    notifier-> behavior,
+                    notifier->pgsize_flag,
+                    notifier->gva_start_addr);
+
+
     pages = vzalloc(sizeof(struct page *) * n_4k_pages);
     if (!pages) {
         printk("vai: %s: failed to alloc memory for page list: size %ld\n", __func__, 8*npages);
@@ -349,33 +358,6 @@ static void vai_dma_unpin_all_pages(void)
         hash_del(&p->node);
         kfree(p);
     }
-}
-
-static long vai_dma_unpin_pages(struct vai_map_info *info)
-{
-    long npages = info->length >> PAGE_SHIFT;
-    struct pinned_page *tmp, *res = NULL;
-    long i;
-
-    for (i=0; i<npages; i++) {
-        uint64_t vfn = (info->user_addr >> PAGE_SHIFT) + i;
-
-        hash_for_each_possible(pinned_pages, tmp, node, vfn) {
-            if (vfn == tmp->vfn) {
-                res = tmp;
-                break;
-            }
-        }
-
-        if (res) {
-            vai_dma_notify_page_unmap(res->vfn);
-            hash_del(&res->node);
-            put_page(res->page);
-            kfree(res);
-        }
-    }
-
-    return 0;
 }
 
 static long vai_dma_unpin_pages_batch(struct vai_map_info *info)
