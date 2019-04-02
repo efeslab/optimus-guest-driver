@@ -29,6 +29,21 @@ static struct class *class;
 resource_size_t bar0_start, bar0_end;
 resource_size_t bar2_start, bar2_end;
 
+#define PGSHIFT_4K 12
+#define PGSHIFT_2M 21
+#define PGSHIFT_1G 30
+
+#define PGSIZE_4K (1UL << PGSHIFT_4K)
+#define PGSIZE_2M (1UL << PGSHIFT_2M)
+#define PGSIZE_1G (1UL << PGSHIFT_1G)
+
+#define PGSIZE_FLAG_4K (1 << 0)
+#define PGSIZE_FLAG_2M (1 << 1)
+#define PGSIZE_FLAG_1G (1 << 2)
+
+#define MAP_BEHAVISOR_MAP 0x0
+#define MAP_BEHAVISOR_UNMAP 0x1
+
 static int open_cnt;
 DEFINE_MUTEX(open_cnt_lock);
 DEFINE_MUTEX(io_lock);
@@ -155,13 +170,15 @@ static long vai_ioctl_get_id(void __user *arg)
 
 struct pinned_page {
     uint64_t vfn;
+    uint16_t pgsize_flag;
     struct page *page;
     struct hlist_node node;
 };
 
 struct fast_pin_notifier {
     uint32_t num_pages;
-    uint32_t behavior;
+    uint16_t behavior;
+    uint16_t pgsize_flag;
     uint64_t gva_start_addr;
     uint64_t gpas[0];
 };
@@ -181,75 +198,75 @@ static void vai_dma_notify_page_unmap(uint64_t vfn)
     vai_b1w64_mmio(VAI_PAGING_NOTIFY_MAP, VAI_NOTIFY_DO_UNMAP);
 }
 
-static long vai_dma_pin_pages(struct vai_map_info *info)
+static uint64_t vai_check_page_size(struct vai_map_info *info)
 {
-    long npages, i;
-    long pinned, all_pinned=0;
-    struct pinned_page *tmp, *res = NULL;
+    struct vm_area_struct *vma;
+    uint64_t pgsize;
+    uint64_t off;
 
-    if (!info)
-        return -EFAULT;
+    vma = find_vma(current->mm, info->user_addr);
+    pgsize = vma_kernel_pagesize(vma);
 
-    npages = info->length >> PAGE_SHIFT;
+    if (pgsize == PGSIZE_4K)
+        return PGSIZE_4K;
 
-    for (i=0; i<npages; i++) {
-        struct pinned_page *pg = kzalloc(sizeof(*pg), GFP_KERNEL);
-        uint64_t vfn = (info->user_addr >> PAGE_SHIFT) + i;
+    if (pgsize > info->length)
+        return PGSIZE_4K;
 
-        pinned = get_user_pages_fast(info->user_addr+i*PAGE_SIZE, 1, 1, &pg->page);
-        if (pinned != 1)
-            goto err;
+    for (off = pgsize; off < info->length; off += pgsize) {
+        struct vm_area_struct *vma_iter;
 
-        //printk("vai: vfn: %llx ==> pfn: %lx\n", vfn, page_to_pfn(pg->page));
+        vma_iter = find_vma(current->mm, info->user_addr + off);
+        if (vma_iter == vma)
+            continue;
 
-        vai_dma_notify_page_map(vfn, page_to_pfn(pg->page));
-
-        pg->vfn = vfn;
-        all_pinned += pinned;
-        hash_add(pinned_pages, &pg->node, vfn);
+        if (vma_kernel_pagesize(vma) == pgsize)
+            vma = vma_iter;
+        else
+            return PGSIZE_4K;
     }
 
-    return !(all_pinned == npages);
-
-err:
-    for (i=0; i<all_pinned; i++) {
-        uint64_t vfn = (info->user_addr >> PAGE_SHIFT) + i;
-
-        hash_for_each_possible(pinned_pages, tmp, node, vfn) {
-            if (vfn == tmp->vfn) {
-                res = tmp;
-                break;
-            }
-        }
-
-        if (res) {
-            vai_dma_notify_page_unmap(res->vfn);
-            hash_del(&res->node);
-            put_page(res->page);
-            kfree(res);
-        }
-    }
-
-    return -EFAULT;
+    return pgsize;
 }
 
-static long vai_dma_pin_pages_batch(struct vai_map_info *info)
+static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
 {
-    long npages, i;
+    long npages, n_4k_pages;
+    long i, off, iter;
     long pinned;
     long full_size;
     struct fast_pin_notifier *notifier = NULL;
     uint64_t notifier_pa;
     struct page **pages;
     int ret;
-    unsigned long pgsize;
-    struct vm_area_struct *vma;
-    uint64_t t1, t2;
+    int stride, shift, flag;
 
     if (!info)
         return -EFAULT;
 
-    npages = info->length >> PAGE_SHIFT;
+    if (pgsize == 0)
+        pgsize = vai_check_page_size(info);
+
+    printk("vai: %s: checked pgsize == %#llx\n", __func__, pgsize);
+
+    if (pgsize == PGSIZE_4K) {
+        stride = 1;
+        shift = PGSHIFT_4K;
+        flag = PGSIZE_FLAG_4K;
+    }
+    else if (pgsize == PGSIZE_2M) {
+        stride = 512;
+        shift = PGSHIFT_2M;
+        flag = PGSIZE_FLAG_2M;
+    }
+    else {
+        stride = 512*512;
+        shift = PGSHIFT_1G;
+        flag = PGSIZE_FLAG_1G;
+    }
+
+    npages = info->length >> shift;
+    n_4k_pages = info->length >> PAGE_SHIFT;
 
     full_size = sizeof(*notifier) + sizeof(uint64_t) * npages;
     notifier = kzalloc(full_size, GFP_KERNEL);
@@ -259,13 +276,13 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info)
             return -ENOMEM;
 
 #define DEFAULT_BATCH_SIZE 508
-        for (i = 0; i < info->length; i += (PAGE_SIZE * DEFAULT_BATCH_SIZE)) {
+        for (off = 0; off < info->length; off += (pgsize * DEFAULT_BATCH_SIZE)) {
             struct vai_map_info new_info;
 
-            new_info.user_addr = info->user_addr + i;
-            new_info.length = (i + PAGE_SIZE * DEFAULT_BATCH_SIZE <= info->length) ?
-                        DEFAULT_BATCH_SIZE * PAGE_SIZE : (info->length - i);
-            ret = vai_dma_pin_pages_batch(&new_info);
+            new_info.user_addr = info->user_addr + off;
+            new_info.length = (off + pgsize * DEFAULT_BATCH_SIZE <= info->length) ?
+                        DEFAULT_BATCH_SIZE * pgsize : (info->length - off);
+            ret = vai_dma_pin_pages_batch(&new_info, pgsize);
             if (ret)
                 return ret;
         }
@@ -275,40 +292,40 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info)
 
     /* set the header of fast paging notifier */
     notifier->num_pages = npages;
-    notifier->behavior = 0; /* 0 for map */
+    notifier->behavior = MAP_BEHAVISOR_MAP; /* 0 for map */
+    notifier->pgsize_flag = (pgsize == PGSIZE_4K ? PGSIZE_FLAG_4K :
+                                (pgsize == PGSIZE_2M ? PGSIZE_FLAG_2M : PGSIZE_FLAG_1G));
     notifier->gva_start_addr = info->user_addr;
 
-    pages = vzalloc(sizeof(struct page *) * npages);
+    pages = vzalloc(sizeof(struct page *) * n_4k_pages);
     if (!pages) {
         printk("vai: %s: failed to alloc memory for page list: size %ld\n", __func__, 8*npages);
         return -ENOMEM;
     }
 
     /* pin the pages and get page struct */
-    pinned = get_user_pages_fast(info->user_addr, npages, 1, pages);
-    if (pinned != npages) {
+    pinned = get_user_pages_fast(info->user_addr, n_4k_pages, 1, pages);
+    if (pinned != n_4k_pages) {
         printk("vai: %s: cannot pin pages, expected %ld, pinned %ld\n",
                     __func__, npages, pinned);
         return -EFAULT;
     }
 
-    t1 = rdtsc();
-    vma = find_vma(current->mm, info->user_addr);
-    pgsize = vma_kernel_pagesize(vma);
-    t2 = rdtsc();
-    printk("vai: page size: %#llx, time: %llu\n", pgsize, t2 - t1);
-
     /* set gpa in notifier and add pinned pages to hash table */
-    for (i = 0; i < npages; i++) {
+    iter = 0;
+    for (i = 0; i < n_4k_pages; i += stride) {
         struct pinned_page *pg = kzalloc(sizeof(*pg), GFP_KERNEL);
         uint64_t vfn = (info->user_addr >> PAGE_SHIFT) + i;
 
         /* set gpa */
-        notifier->gpas[i] = page_to_pfn(pages[i]) << PAGE_SHIFT;
+        notifier->gpas[iter] = page_to_pfn(pages[i]) << PAGE_SHIFT;
 
         pg->vfn = vfn;
         pg->page = pages[i];
+        pg->pgsize_flag = flag;
         hash_add(pinned_pages, &pg->node, vfn);
+
+        iter++;
     }
 
     /* do the notification */
@@ -368,6 +385,9 @@ static long vai_dma_unpin_pages_batch(struct vai_map_info *info)
     long i;
     struct fast_pin_notifier *notifier;
     uint64_t notifier_pa;
+    uint64_t pgsize;
+
+    pgsize = vai_check_page_size(info);
 
     for (i = 0; i < npages; i++) {
         uint64_t vfn = (info->user_addr >> PAGE_SHIFT) + i;
@@ -392,7 +412,9 @@ static long vai_dma_unpin_pages_batch(struct vai_map_info *info)
         return -ENOMEM;
     }
     notifier->num_pages = npages;
-    notifier->behavior = 1;
+    notifier->behavior = MAP_BEHAVISOR_UNMAP;
+    notifier->pgsize_flag = (pgsize == PGSIZE_4K ? PGSIZE_FLAG_4K :
+                        (pgsize == PGSIZE_2M ? PGSIZE_FLAG_2M : PGSIZE_FLAG_1G));
     notifier->gva_start_addr = info->user_addr;
     notifier_pa = virt_to_phys(notifier);
 
@@ -421,7 +443,7 @@ static long vai_ioctl_dma_map_region(void __user *arg)
     if (user_addr + length < user_addr)
         return -EINVAL;
 
-    ret = vai_dma_pin_pages_batch(&info);
+    ret = vai_dma_pin_pages_batch(&info, 0);
     if (ret)
         return -EINVAL;
 
