@@ -244,7 +244,7 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
     if (!info)
         return -EFAULT;
 
-    printk("vai: map_info: start_addr=%#llx, len=%d\n", info->start_addr, info->length);
+    printk("vai: map_info: start_addr=%#llx, len=%d\n", info->user_addr, info->length);
 
     if (pgsize == 0)
         pgsize = vai_check_page_size(info);
