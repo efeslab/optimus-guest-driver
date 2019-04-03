@@ -244,12 +244,12 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
     if (!info)
         return -EFAULT;
 
-    printk("vai: map_info: start_addr=%#llx, len=%#llx\n", info->user_addr, info->length);
+    //printk("vai: map_info: start_addr=%#llx, len=%#llx\n", info->user_addr, info->length);
 
     if (pgsize == 0)
         pgsize = vai_check_page_size(info);
 
-    printk("vai: %s: checked pgsize == %#llx\n", __func__, pgsize);
+    //printk("vai: %s: checked pgsize == %#llx\n", __func__, pgsize);
 
     if (pgsize == PGSIZE_4K) {
         stride = 1;
@@ -299,11 +299,13 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
                                 (pgsize == PGSIZE_2M ? PGSIZE_FLAG_2M : PGSIZE_FLAG_1G));
     notifier->gva_start_addr = info->user_addr;
 
+    /*
     printk("vai: notifier: num_pages=%d, behavior=%x, pgsize_flag=%x, gva_start_addr=%#x\n",
                     notifier->num_pages,
                     notifier->behavior,
                     notifier->pgsize_flag,
                     notifier->gva_start_addr);
+    */
 
 
     pages = vzalloc(sizeof(struct page *) * n_4k_pages);
@@ -336,7 +338,7 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
 
         /* set gpa */
         notifier->gpas[iter] = page_to_pfn(pages[i]) << PAGE_SHIFT;
-        printk("vai: va %#llx pa %#llx\n", vfn << PAGE_SHIFT, notifier->gpas[iter]);
+        //printk("vai: va %#llx pa %#llx\n", vfn << PAGE_SHIFT, notifier->gpas[iter]);
 
         pg->vfn = vfn;
         pg->page = pages[i];
@@ -346,7 +348,7 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
         iter++;
     }
 
-    printk("vai: added %d pages to notifier\n", iter);
+    //printk("vai: added %d pages to notifier\n", iter);
 
     /* do the notification */
     notifier_pa = virt_to_phys(notifier);
