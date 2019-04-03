@@ -244,7 +244,7 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
     if (!info)
         return -EFAULT;
 
-    printk("vai: map_info: start_addr=%#llx, len=%lld\n", info->user_addr, info->length);
+    printk("vai: map_info: start_addr=%#llx, len=%#llx\n", info->user_addr, info->length);
 
     if (pgsize == 0)
         pgsize = vai_check_page_size(info);
@@ -299,9 +299,9 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
                                 (pgsize == PGSIZE_2M ? PGSIZE_FLAG_2M : PGSIZE_FLAG_1G));
     notifier->gva_start_addr = info->user_addr;
 
-    printk("vai: notifier: num_pages=%d, behavior=%s, pgsize_flag=%s, gva_start_addr\n",
+    printk("vai: notifier: num_pages=%d, behavior=%x, pgsize_flag=%x, gva_start_addr=%#x\n",
                     notifier->num_pages,
-                    notifier-> behavior,
+                    notifier->behavior,
                     notifier->pgsize_flag,
                     notifier->gva_start_addr);
 
@@ -336,6 +336,7 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
 
         /* set gpa */
         notifier->gpas[iter] = page_to_pfn(pages[i]) << PAGE_SHIFT;
+        printk("vai: va %#llx pa %#llx\n", vfn << PAGE_SHIFT, notifier->gpas[iter]);
 
         pg->vfn = vfn;
         pg->page = pages[i];
@@ -344,6 +345,8 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
 
         iter++;
     }
+
+    printk("vai: added %d pages to notifier\n", iter);
 
     /* do the notification */
     notifier_pa = virt_to_phys(notifier);
@@ -362,7 +365,22 @@ static void vai_dma_unpin_all_pages(void)
     int i;
 
     hash_for_each_safe(pinned_pages, i, tmp, p, node) {
-        put_page(p->page);
+        if (p->pgsize_flag == PGSIZE_FLAG_4K) {
+            put_page(p->page);
+        }
+        else if (p->pgsize_flag == PGSIZE_FLAG_2M) {
+            long offset;
+            for (offset = 0; offset < 512; offset++) {
+                put_page(p->page+offset);
+            }
+        }
+        else {
+            long offset;
+            for (offset = 0; offset < 512*512; offset++) {
+                put_page(p->page+offset);
+            }
+        }
+
         hash_del(&p->node);
         kfree(p);
     }
@@ -391,7 +409,23 @@ static long vai_dma_unpin_pages_batch(struct vai_map_info *info)
 
         if (res) {
             hash_del(&res->node);
-            put_page(res->page);
+
+            if (res->pgsize_flag == PGSIZE_FLAG_4K) {
+                put_page(res->page);
+            }
+            else if (res->pgsize_flag == PGSIZE_FLAG_2M) {
+                long offset;
+                for (offset = 0; offset < 512; offset++) {
+                    put_page(res->page+offset);
+                }
+            }
+            else {
+                long offset;
+                for (offset = 0; offset < 512*512; offset++) {
+                    put_page(res->page+offset);
+                }
+            }
+
             kfree(res);
         }
     }
