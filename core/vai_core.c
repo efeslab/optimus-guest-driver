@@ -244,7 +244,7 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
     if (!info)
         return -EFAULT;
 
-    printk("vai: map_info: start_addr=%#llx, len=%d\n", info->user_addr, info->length);
+    printk("vai: map_info: start_addr=%#llx, len=%lld\n", info->user_addr, info->length);
 
     if (pgsize == 0)
         pgsize = vai_check_page_size(info);
@@ -317,6 +317,14 @@ static long vai_dma_pin_pages_batch(struct vai_map_info *info, uint64_t pgsize)
     if (pinned != n_4k_pages) {
         printk("vai: %s: cannot pin pages, expected %ld, pinned %ld\n",
                     __func__, npages, pinned);
+
+        for (i = 0; i < pinned; i++) {
+            put_page(pages[i]);
+        }
+
+        kfree(notifier);
+        vfree(pages);
+
         return -EFAULT;
     }
 
