@@ -663,4 +663,4 @@ module_exit(vai_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jiacheng Ma <jcma@umich.edu>");
-MODULE_DESCRIPTION("VAI Guest Deiver");
+MODULE_DESCRIPTION("Guest Accelerator Driver for Optimus FPGA Hypervisor");
